@@ -6,3 +6,15 @@
 
 @interface NSUUID (CMHealth)<CMCoding>
 @end
+
+@interface NSCalendar (CMHealth)<CMCoding>
+@end
+
+@interface NSTimeZone (CMHealth)<CMCoding>
+@end
+
+@interface NSLocale (CMHealth)<CMCoding>
+@end
+
+@interface NSDateComponents (CMHealth)<CMCoding>
+@end

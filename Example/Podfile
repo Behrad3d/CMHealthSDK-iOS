@@ -1,13 +1,15 @@
+platform :ios, '9.0'
 source 'https://github.com/CocoaPods/Specs.git'
 use_frameworks!
 
-target 'CMHealth_Example', :exclusive => true do
+target 'CMHealth_Example' do
   pod 'CMHealth', :path => '../'
-end
+  #pod "CareKit", "~> 1.0"
 
-target 'CMHealth_Tests', :exclusive => true do
-  pod 'CMHealth', :path => '../'
+  target 'CMHealth_Tests' do
+    inherit! :search_paths
 
-  pod 'Specta'
-  pod 'Expecta'
+    pod 'Specta'
+    pod 'Expecta'
+  end
 end

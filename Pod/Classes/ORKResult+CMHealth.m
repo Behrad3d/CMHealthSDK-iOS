@@ -2,12 +2,15 @@
 #import <CloudMine/CloudMine.h>
 #import "CMHResult.h"
 #import "Cocoa+CMHealth.h"
-#import "ORKConsentSignature+CMHealth.h"
+#import "ResearchKit+CMHealth.h"
 #import "CMHConstants_internal.h"
 #import "CMHErrors.h"
 #import "CMHErrorUtilities.h"
 
 @implementation ORKResult (CMHealth)
+@end
+
+@implementation ORKTaskResult (CMHealth)
 
 #pragma mark Public API
 
@@ -25,7 +28,7 @@
             return;
         }
 
-        NSError *error = [ORKResult errorForUploadWithObjectId:resultWrapper.objectId uploadResponse:response];
+        NSError *error = [CMHErrorUtilities errorForUploadWithObjectId:resultWrapper.objectId uploadResponse:response];
         if (nil != error) {
             block(nil, error);
             return;
@@ -80,7 +83,27 @@
         composedQuery = [NSString stringWithFormat:@"%@.rkResult%@", composedQuery, query];
     }
 
-    [[CMStore defaultStore] searchUserObjects:composedQuery
+    [self cmh_internalFetchUserResultsForTopLevelQuery:composedQuery withCompletion:block];
+}
+
++ (void)cmh_fetchUserResultsWithRunUUID:(NSUUID *_Nonnull)uuid
+                         withCompletion:(_Nullable CMHFetchCompletion)block
+{
+    NSAssert(nil != uuid, @"You must supply a valid task run UUID when fetching a specific unique result");
+
+    NSString *query = [NSString stringWithFormat:@"[%@ = \"%@\", %@ = \"%@\"]", CMInternalClassStorageKey, [CMHResult class], CMInternalObjectIdKey, uuid.UUIDString];
+
+    [self cmh_internalFetchUserResultsForTopLevelQuery:query withCompletion:block];
+}
+
+# pragma mark Private Helpers
+
++ (void)cmh_internalFetchUserResultsForTopLevelQuery:(NSString *_Nonnull)query
+                                      withCompletion:(_Nullable CMHFetchCompletion)block
+{
+    NSAssert(nil != query, @"Internal query for CMHResult wrapper objects cannot be nil");
+
+    [[CMStore defaultStore] searchUserObjects:query
                             additionalOptions:nil
                                      callback:^(CMObjectFetchResponse *response)
      {
@@ -88,7 +111,7 @@
              return;
          }
 
-         NSError *error = [ORKResult errorForFetchWithResponse:response];
+         NSError *error = [CMHErrorUtilities errorForFetchWithResponse:response];
          if (nil != error) {
              block(nil, error);
              return;
@@ -105,72 +128,6 @@
 
          block([mutableResults copy], nil);
      }];
-}
-
-# pragma mark Error Generators
-+ (NSError *_Nullable)errorForFetchWithResponse:(CMObjectFetchResponse *_Nullable)response
-{
-    NSString *errorPrefix = NSLocalizedString(@"Failed to fetch results", nil);
-
-    NSError *responseError = [self errorForInternalError:response.error withPrefix:errorPrefix];
-    if (nil != responseError) {
-        return responseError;
-    }
-
-    // Note: an error with any result will cause an error for the whole fetch.
-    // This decision keeps the API simple, but is there a compelling reason why
-    // we wouldn't want this?
-    NSString *objectInternalErrorMessage = response.objectErrors[response.objectErrors.allKeys.firstObject][@"message"];
-    NSString *errorKey = response.objectErrors.allKeys.firstObject;
-
-    if(nil != objectInternalErrorMessage) {
-        NSString *objectErrorMessage = [NSString localizedStringWithFormat:@"%@; there was an error with at least one object: %@ (key: %@)", errorPrefix, objectInternalErrorMessage, errorKey];
-        return [CMHErrorUtilities errorWithCode:CMHErrorUnknown localizedDescription:objectErrorMessage];
-    }
-
-    return nil;
-}
-
-+ (NSError *_Nullable)errorForUploadWithObjectId:(NSString *_Nonnull)objectId uploadResponse:(CMObjectUploadResponse *)response
-{
-    NSString *errorPrefix = NSLocalizedString(@"Failed to save results", nil);
-
-    NSError *responseError = [self errorForInternalError:response.error withPrefix:errorPrefix];
-    if (nil != responseError) {
-        return responseError;
-    }
-
-    if (nil == response.uploadStatuses || nil == [response.uploadStatuses objectForKey:objectId]) {
-        NSString *noStatusMessage = [NSString localizedStringWithFormat:@"%@. No response received", errorPrefix];
-        return [CMHErrorUtilities errorWithCode:CMHErrorInvalidResponse
-                           localizedDescription:noStatusMessage];
-    }
-
-    NSString *resultUploadStatus = [response.uploadStatuses objectForKey:objectId];
-
-    if(![@"created" isEqualToString:resultUploadStatus] && ![@"updated" isEqualToString:resultUploadStatus]) {
-        NSString *invalidStatusMessage = [NSString localizedStringWithFormat:@"%@. Invalid upload status returned: %@", errorPrefix, resultUploadStatus];
-        return [CMHErrorUtilities errorWithCode:CMHErrorInvalidResponse localizedDescription:invalidStatusMessage];
-    }
-
-    return nil;
-}
-
-+ (NSError *_Nullable)errorForInternalError:(NSError *_Nullable)error withPrefix:(NSString *_Nonnull)prefix
-{
-    if (nil == error) {
-        return nil;
-    }
-
-    if (![error.domain isEqualToString:CMErrorDomain]) {
-        NSString *unknownMessage = [NSString stringWithFormat:@"%@. %@ (%@, %li)", prefix, error.localizedDescription, error.domain, error.code];
-        return [CMHErrorUtilities errorWithCode:CMHErrorUnknown localizedDescription:unknownMessage];
-    }
-
-    CMHError localCode = [CMHErrorUtilities localCodeForCloudMineCode:error.code];
-    NSString *message = [NSString stringWithFormat:@"%@. %@", prefix, [CMHErrorUtilities messageForCode:localCode]];
-
-    return [CMHErrorUtilities errorWithCode:localCode localizedDescription:message];
 }
 
 @end
